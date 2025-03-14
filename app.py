@@ -9,7 +9,7 @@ def home():
 
 @app.route('/update-db')
 def update_db():
-    subprocess.run(["python3", "seu_script.py"])
+    subprocess.run(["python3", "atualizarPedidos.py"])
     return "Atualização concluída!"
 
 if __name__ == '__main__':

@@ -72,6 +72,7 @@ def exportar_dados_api_receitas(token):
     except requests.exceptions.RequestException as e:
         print(f"Erro ao exportar dados de receitas: {e}")
 
+
 # Exportar dados da API 'api_dados' para a tabela 'dados'
 def exportar_dados_api_dados(token):
     url = "https://api.pontta.com/api/sales-orders/resume"
@@ -96,6 +97,63 @@ def exportar_dados_api_dados(token):
         limpar_tabela("dados")
         inserir_dados("dados", ["Codigo", "Cliente", "Cliente_Final", "Data_Entrega"], dados)
     
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao exportar dados de dados: {e}")
+
+import requests
+
+def exportar_dados_api_agrupamento(token):
+    url = "https://api.pontta.com/api/production-groups/"
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        dados_api = response.json()
+        print("Dados recebidos de api_dados:", dados_api)  # Depuração
+
+        # Agora buscar todas as requisições aprovadas
+        url_requisicoes = "https://api.pontta.com/api/purchase-requisitions/approveds"
+        response_requisicoes = requests.get(url_requisicoes, headers=headers)
+        response_requisicoes.raise_for_status()
+        requisicoes = response_requisicoes.json()
+
+        # Agrupar totais por ProductionGroupID
+        totais_por_grupo = {}
+        for item in requisicoes:
+            group_id = item.get("reference", {}).get("PRODUCTIONGROUP_ID")
+            code = item.get("code", "").strip().replace(" ", "").upper()
+            quantity = item.get("quantity", {})
+            valor = quantity.get("value", 0)
+
+            if code.startswith("MDF") and group_id:
+                if group_id not in totais_por_grupo:
+                    totais_por_grupo[group_id] = {"branco": 0, "cores": 0}
+
+                if code.endswith("34"):
+                    totais_por_grupo[group_id]["branco"] += valor
+                else:
+                    totais_por_grupo[group_id]["cores"] += valor
+
+        # Montar dados com as colunas adicionais "Branco" e "Cores"
+        dados = []
+        for item in dados_api:
+            group_id = item["id"]
+            branco = totais_por_grupo.get(group_id, {}).get("branco", 0)
+            cores = totais_por_grupo.get(group_id, {}).get("cores", 0)
+
+            dados.append((
+                group_id,
+                item["identifier"],
+                item["finishDate"],
+                item.get("resume", {}).get("controllableProductionItems", 0),
+                branco,
+                cores
+            ))
+
+        # Limpar tabela e inserir os dados com as novas colunas
+        limpar_tabela("AGP")
+        inserir_dados("AGP", ["ID", "AGP", "Data_Final", "Pecas", "Branco", "Cores"], dados)
+
     except requests.exceptions.RequestException as e:
         print(f"Erro ao exportar dados de dados: {e}")
 
@@ -129,6 +187,7 @@ def atualizar_tabelas():
 
     exportar_dados_api_receitas(token)
     exportar_dados_api_dados(token)
+    exportar_dados_api_agrupamento(token)
     atualizar_valores()
 
 # Executar o processo
